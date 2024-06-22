@@ -3,58 +3,72 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Utils.sol";
-import "./vAMM.sol";
 
-contract TokenVault is Utils, ReentrancyGuard {
+contract TokenVault is Utils, ReentrancyGuard, Ownable {
+    IERC20 public token;
+    address public ammAddress;
+    mapping(address => uint256) public virtualBalanceOf; // _virtualAmount is the amount of virtual tokens
+
     modifier onlyAMM() {
-        require(msg.sender == address(amm), "Only AMM can call this function");
+        require(msg.sender == ammAddress, "Only AMM can call this function");
         _;
     }
 
-    IERC20 public token;
-    vAMM public amm;
-    mapping(address => uint256) public virtualBalanceOf;
-    
-
-    constructor(address _tokenContract, uint256 _initialTokenReserve, uint256 _initialEthReserve) {
+    constructor(address _tokenContract) Ownable(msg.sender) {
         token = IERC20(_tokenContract);
-        amm = new vAMM(address(this), _tokenContract, _initialTokenReserve, _initialEthReserve);
     }
 
-    // virtualOnChainAmount = amount * (10 ^ 18) * MAX_LEVERAGE, and this conversion should be done off-chain to save gas
-    function depositToken(uint256 virtualOnChainAmount) external {
-        require(virtualOnChainAmount > 0, "Amount must be greater than 0");
-
-        token.transferFrom(msg.sender, address(this), virtualOnChainAmount);
-        virtualBalanceOf[msg.sender] += virtualOnChainAmount;
+    function setAMMAddress(address _ammAddress) external onlyOwner {
+        require(ammAddress == address(0), "AMM address has been set");
+        ammAddress = _ammAddress;
     }
 
-    // VirtualAmount calculation is done off-chain to save gas
-    function withdrawToken(uint256 virtualOnChainAmount) external nonReentrant {
+    function depositToken(uint256 _amount) external {
+        require(_amount > 0, "Deposit Amount must be greater than 0");
+
+        token.transferFrom(msg.sender, address(this), _amount);
+        virtualBalanceOf[msg.sender] += _amount * MAX_LEVERAGE;
+    }
+
+    function withdrawToken(uint256 _amount) external nonReentrant {
         // if virtualOnChainAmount is less than MAX_LEVERAGE, the requested amount is less than a single token
-        require(virtualOnChainAmount >= MAX_LEVERAGE, "Withdraw amount must be greater than 0");
-        require(virtualBalanceOf[msg.sender] >= virtualOnChainAmount, "Insufficient balance"); 
-        require(token.balanceOf(address(this)) * MAX_LEVERAGE >= virtualOnChainAmount, "Insufficient reserve in the Vault contract");
+        require(_amount >= 0, "Withdraw amount must be greater than 0");
+        require(
+            virtualBalanceOf[msg.sender] >= _amount * MAX_LEVERAGE,
+            "Insufficient balance"
+        );
+        require(
+            token.balanceOf(address(this)) >= _amount,
+            "Insufficient reserve in the Vault contract"
+        );
 
         // Checks-Effects-Interactions
-        virtualBalanceOf[msg.sender] -= virtualOnChainAmount;
-
-        // Use division due to withdrawal is likely a less frequent operation. And I would like to save on-chain storage space.
-        token.transfer(msg.sender, virtualOnChainAmount / MAX_LEVERAGE);
+        virtualBalanceOf[msg.sender] -= _amount * MAX_LEVERAGE;
+        token.transfer(msg.sender, _amount);
     }
 
-    function openPosition(uint256 virtualOnChainAmount) external onlyAMM returns (bool){
-        require(virtualBalanceOf[msg.sender] >= virtualOnChainAmount, "Insufficient balance");
-
-        virtualBalanceOf[msg.sender] -= virtualOnChainAmount;
-
-        return true;
+    function openPosition(
+        uint256 _virtualAmount,
+        address _userAddress
+    ) external onlyAMM returns (bool) {
+        if (virtualBalanceOf[_userAddress] < _virtualAmount) {
+            return false;
+        } else {
+            virtualBalanceOf[_userAddress] -= _virtualAmount;
+            return true;
+        }
     }
 
-    function closePosition(uint256 virtualOnChainAmount) external onlyAMM returns (bool) {
-        virtualBalanceOf[msg.sender] += virtualOnChainAmount;
+    function closePosition(
+        uint256 _virtualAmount,
+        address _userAddress
+    ) external onlyAMM {
+        virtualBalanceOf[_userAddress] += _virtualAmount;
+    }
 
-        return true;
+    function getAccountValue(address _userAddress) external view returns (uint256) {
+        return virtualBalanceOf[_userAddress];
     }
 }

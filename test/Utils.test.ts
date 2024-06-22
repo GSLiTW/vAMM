@@ -4,7 +4,7 @@ import hre from "hardhat";
 
 describe("Utils", function () {
     async function deployUtilsFixture() {
-        const utils = await hre.viem.deployContract("UtilsWrapper");
+        const utils = await hre.viem.deployContract("UtilsWrapper", []);
 
         return { utils };
     };

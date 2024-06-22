@@ -1,13 +1,16 @@
-# Sample Hardhat Project
+# A PoC vAMM similar to Perpetual Protocol V1
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+Run the following script to run the tests.
 
-Try running some of the following tasks:
+Some of the implementation may be simpler to save gas, e.g., some amount calculation done off-chain. But the implementation is there for better code readibility.
 
 ```shell
-npx hardhat help
+npm install
 npx hardhat test
+```
+
+or
+
+```shell
 REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.ts
 ```
