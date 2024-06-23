@@ -20,7 +20,7 @@ describe("vAMM contract", function () {
       initialEthReserve,
     ]);
 
-    TokenVault.write.setAMMAddress([VAMM.address]);
+    await TokenVault.write.setAMMAddress([VAMM.address]);
 
     return { VAMM, TokenVault, MockUSDC, owner, userAccount };
   }
@@ -48,15 +48,14 @@ describe("vAMM contract", function () {
       await VAMM.write.openPosition([initialTokenReserve, true], { account: userAccount.account.address }); // add token to be 2x of the initial reserve
 
       // Reverves should follow x => 2x then y => 1/2x rule from x * y = k curve
-      expect(await VAMM.read.totalReserve()).to.equal( initialTokenReserve * initialEthReserve);
-      expect(await VAMM.read.tokenReserve()).to.equal( initialTokenReserve * BigInt(2));
-      expect(await VAMM.read.ethReserve()).to.equal( initialEthReserve / BigInt(2));
+      expect(await VAMM.read.totalReserve()).to.equal(initialTokenReserve * initialEthReserve);
+      expect(await VAMM.read.tokenReserve()).to.equal(initialTokenReserve * BigInt(2));
+      expect(await VAMM.read.ethReserve()).to.equal(initialEthReserve / BigInt(2));
 
       // User's 0th position should be long with half of the initial eth token reserve
       const positions = await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(0)]);
       expect(positions[0]).to.equal(initialEthReserve / BigInt(2));
       expect(positions[1]).to.equal(true);
-
     });
 
     it("Should open a short position correctly", async function () {
@@ -68,9 +67,9 @@ describe("vAMM contract", function () {
       await VAMM.write.openPosition([initialTokenReserve / BigInt(2), false], { account: userAccount.account.address }); // sub token to be 1/2x of the initial reserve
 
       // Reverves should follow x => 1/2x then y => 2x rule from x * y = k curve
-      expect(await VAMM.read.totalReserve()).to.equal( initialTokenReserve * initialEthReserve);
-      expect(await VAMM.read.tokenReserve()).to.equal( initialTokenReserve / BigInt(2));
-      expect(await VAMM.read.ethReserve()).to.equal( initialEthReserve * BigInt(2));
+      expect(await VAMM.read.totalReserve()).to.equal(initialTokenReserve * initialEthReserve);
+      expect(await VAMM.read.tokenReserve()).to.equal(initialTokenReserve / BigInt(2));
+      expect(await VAMM.read.ethReserve()).to.equal(initialEthReserve * BigInt(2));
 
       // User's 0th position should be long with half of the initial eth token reserve
       const positions = await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(0)]);
@@ -80,7 +79,7 @@ describe("vAMM contract", function () {
 
     it("Should fully close a position correctly", async function () {
       const { VAMM, MockUSDC, userAccount, TokenVault } = await loadFixture(deployVAMMFixture);
-      
+
       await MockUSDC.write.mint([userAccount.account.address, initialTokenReserve]);
       await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: userAccount.account.address });
       await TokenVault.write.depositToken([initialTokenReserve], { account: userAccount.account.address });
@@ -108,6 +107,47 @@ describe("vAMM contract", function () {
     it("Should revert close position if index is invalid", async function () {
       const { VAMM, userAccount } = await loadFixture(deployVAMMFixture);
       await expect(VAMM.write.closePosition([0], { account: userAccount.account.address })).to.be.rejectedWith("Invalid position index");
+    });
+  });
+
+  describe("Emit Evnets", function () {
+    it("Should emit PositionOpenedEvent and PositionClosedEvent event correctly", async function () {
+      const { TokenVault, MockUSDC, VAMM, userAccount } = await loadFixture(deployVAMMFixture);
+
+      await MockUSDC.write.mint([userAccount.account.address, initialTokenReserve]);
+      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: userAccount.account.address });
+      await TokenVault.write.depositToken([initialTokenReserve], { account: userAccount.account.address });
+      await VAMM.write.openPosition([initialTokenReserve, true], { account: userAccount.account.address });
+      const positionOpenedEvent = await (await hre.viem.getPublicClient()).getContractEvents({
+        address: VAMM.address as `0x${string}`,
+        abi: VAMM.abi,
+        eventName: "PositionOpenedEvent",
+        args: {
+          user: userAccount.account.address,
+        }
+      });
+
+      await expect(positionOpenedEvent[0]).to.be.not.null;
+      await expect(positionOpenedEvent[0].address).to.be.equal(VAMM.address);
+      await expect(positionOpenedEvent[0].args.user?.toLowerCase()).to.be.equal(userAccount.account.address);
+      await expect(positionOpenedEvent[0].args.isLong).to.be.equal(true);
+      await expect(positionOpenedEvent[0].args.ethAmount).to.be.equal(initialEthReserve / BigInt(2));
+
+      await VAMM.write.closePosition([0], { account: userAccount.account.address });
+      const positionCLosedEvent = await (await hre.viem.getPublicClient()).getContractEvents({
+        address: VAMM.address as `0x${string}`,
+        abi: VAMM.abi,
+        eventName: "PositionClosedEvent",
+        args: {
+          user: userAccount.account.address,
+        }
+      });
+
+      await expect(positionCLosedEvent[0]).to.be.not.null;
+      await expect(positionCLosedEvent[0].address).to.be.equal(VAMM.address);
+      await expect(positionOpenedEvent[0].args.user?.toLowerCase()).to.be.equal(userAccount.account.address);
+      await expect(positionOpenedEvent[0].args.isLong).to.be.equal(true);
+      await expect(positionOpenedEvent[0].args.ethAmount).to.be.equal(initialEthReserve / BigInt(2));
     });
   });
 });
