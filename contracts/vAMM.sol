@@ -11,8 +11,8 @@ struct Position {
     bool isLong;
 }
 
-event PositionOpened(address indexed user, bool isLong, uint256 ethAmount);
-event PositionClosed(address indexed user, bool isLong, uint256 ethAmount);
+event PositionOpenedEvent(address indexed user, bool isLong, uint256 ethAmount);
+event PositionClosedEvent(address indexed user, bool isLong, uint256 ethAmount);
 
 contract vAMM is Utils {
     using Math for uint256;
@@ -59,7 +59,7 @@ contract vAMM is Utils {
             isLong: _isLong
         }));
 
-        emit PositionOpened(msg.sender, _isLong, uintDiffAbs(oldEthReserve, ethReserve));
+        emit PositionOpenedEvent(msg.sender, _isLong, uintDiffAbs(oldEthReserve, ethReserve));
     }
 
     function closePosition(uint8 _positionIndex) external {
@@ -86,7 +86,7 @@ contract vAMM is Utils {
         vault.closePosition(tokenExchangeAmount, msg.sender);
         removePosition(msg.sender, _positionIndex);
 
-        emit PositionClosed(msg.sender, position.isLong, position.amount);
+        emit PositionClosedEvent(msg.sender, position.isLong, position.amount);
     }
 
     function removePosition(address user, uint8 index) internal {

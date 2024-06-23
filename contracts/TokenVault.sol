@@ -6,6 +6,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Utils.sol";
 
+event DepositTokenEvent(address indexed user, uint256 depositTokenAmount);
+event WithdrawTokenEvent(address indexed user, uint256 withdrawTokenAmount);
+
 contract TokenVault is Utils, ReentrancyGuard, Ownable {
     IERC20 public token;
     address public ammAddress;
@@ -30,6 +33,8 @@ contract TokenVault is Utils, ReentrancyGuard, Ownable {
 
         token.transferFrom(msg.sender, address(this), _amount);
         virtualBalanceOf[msg.sender] += _amount * MAX_LEVERAGE;
+
+        emit DepositTokenEvent(msg.sender, _amount);
     }
 
     function withdrawToken(uint256 _amount) external nonReentrant {
@@ -47,6 +52,8 @@ contract TokenVault is Utils, ReentrancyGuard, Ownable {
         // Checks-Effects-Interactions
         virtualBalanceOf[msg.sender] -= _amount * MAX_LEVERAGE;
         token.transfer(msg.sender, _amount);
+
+        emit WithdrawTokenEvent(msg.sender, _amount);
     }
 
     function openPosition(
