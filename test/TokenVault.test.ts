@@ -20,6 +20,7 @@ describe("TokenVault contract", function () {
             initialTokenReserve,
             initialEthReserve,
         ]);
+        
         await TokenVault.write.setAMMAddress([VAMM.address]);
 
         return { TokenVault, MockUSDC, VAMM, owner, userAccount };

@@ -2,14 +2,14 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox-viem/network-helpe
 import { expect } from "chai";
 import hre from "hardhat";
 
-import { initialTokenReserve, initialEthReserve, initialTokenFund, MAX_LEVERAGE } from "./constants";
+import { initialTokenReserve, initialEthReserve, initialTokenFund } from "./constants";
 
 describe("vAMM contract", function () {
   async function deployVAMMFixture() {
-    const [owner, _, otherAccount] = await hre.viem.getWalletClients();
+    const [owner, userAccount] = await hre.viem.getWalletClients();
 
-    const MockUSDC = await hre.viem.deployContract("MockERC20", ["Mock Token", "MTK"]);
-    await MockUSDC.write.mint([otherAccount.account.address, initialTokenFund]);
+    const MockUSDC = await hre.viem.deployContract("MockERC20", ["Mock USDC", "MUSDC"]);
+    await MockUSDC.write.mint([userAccount.account.address, initialTokenFund]);
 
     const TokenVault = await hre.viem.deployContract("TokenVault", [MockUSDC.address]);
 
@@ -22,7 +22,7 @@ describe("vAMM contract", function () {
 
     TokenVault.write.setAMMAddress([VAMM.address]);
 
-    return { VAMM, TokenVault, MockUSDC, owner, otherAccount };
+    return { VAMM, TokenVault, MockUSDC, owner, userAccount };
   }
 
   describe("Deployment", function () {
@@ -40,12 +40,12 @@ describe("vAMM contract", function () {
 
   describe("Position Operations", function () {
     it("Should open a long position correctly", async function () {
-      const { VAMM, MockUSDC, otherAccount, TokenVault } = await loadFixture(deployVAMMFixture);
+      const { VAMM, MockUSDC, userAccount, TokenVault } = await loadFixture(deployVAMMFixture);
 
-      await MockUSDC.write.mint([otherAccount.account.address, initialTokenReserve]);
-      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: otherAccount.account.address });
-      await TokenVault.write.depositToken([initialTokenReserve], { account: otherAccount.account.address });
-      await VAMM.write.openPosition([initialTokenReserve, true], { account: otherAccount.account.address }); // add token to be 2x of the initial reserve
+      await MockUSDC.write.mint([userAccount.account.address, initialTokenReserve]);
+      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: userAccount.account.address });
+      await TokenVault.write.depositToken([initialTokenReserve], { account: userAccount.account.address });
+      await VAMM.write.openPosition([initialTokenReserve, true], { account: userAccount.account.address }); // add token to be 2x of the initial reserve
 
       // Reverves should follow x => 2x then y => 1/2x rule from x * y = k curve
       expect(await VAMM.read.totalReserve()).to.equal( initialTokenReserve * initialEthReserve);
@@ -53,19 +53,19 @@ describe("vAMM contract", function () {
       expect(await VAMM.read.ethReserve()).to.equal( initialEthReserve / BigInt(2));
 
       // User's 0th position should be long with half of the initial eth token reserve
-      const positions = await VAMM.read.ethPositionsOf([otherAccount.account.address, BigInt(0)]);
+      const positions = await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(0)]);
       expect(positions[0]).to.equal(initialEthReserve / BigInt(2));
       expect(positions[1]).to.equal(true);
 
     });
 
     it("Should open a short position correctly", async function () {
-      const { VAMM, MockUSDC, otherAccount, TokenVault } = await loadFixture(deployVAMMFixture);
+      const { VAMM, MockUSDC, userAccount, TokenVault } = await loadFixture(deployVAMMFixture);
 
-      await MockUSDC.write.mint([otherAccount.account.address, initialTokenReserve]);
-      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: otherAccount.account.address });
-      await TokenVault.write.depositToken([initialTokenReserve], { account: otherAccount.account.address });
-      await VAMM.write.openPosition([initialTokenReserve / BigInt(2), false], { account: otherAccount.account.address }); // sub token to be 1/2x of the initial reserve
+      await MockUSDC.write.mint([userAccount.account.address, initialTokenReserve]);
+      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: userAccount.account.address });
+      await TokenVault.write.depositToken([initialTokenReserve], { account: userAccount.account.address });
+      await VAMM.write.openPosition([initialTokenReserve / BigInt(2), false], { account: userAccount.account.address }); // sub token to be 1/2x of the initial reserve
 
       // Reverves should follow x => 1/2x then y => 2x rule from x * y = k curve
       expect(await VAMM.read.totalReserve()).to.equal( initialTokenReserve * initialEthReserve);
@@ -73,41 +73,41 @@ describe("vAMM contract", function () {
       expect(await VAMM.read.ethReserve()).to.equal( initialEthReserve * BigInt(2));
 
       // User's 0th position should be long with half of the initial eth token reserve
-      const positions = await VAMM.read.ethPositionsOf([otherAccount.account.address, BigInt(0)]);
+      const positions = await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(0)]);
       expect(positions[0]).to.equal(initialEthReserve);
       expect(positions[1]).to.equal(false);
     });
 
     it("Should fully close a position correctly", async function () {
-      const { VAMM, MockUSDC, otherAccount, TokenVault } = await loadFixture(deployVAMMFixture);
+      const { VAMM, MockUSDC, userAccount, TokenVault } = await loadFixture(deployVAMMFixture);
       
-      await MockUSDC.write.mint([otherAccount.account.address, initialTokenReserve]);
-      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: otherAccount.account.address });
-      await TokenVault.write.depositToken([initialTokenReserve], { account: otherAccount.account.address });
-      await VAMM.write.openPosition([initialTokenReserve, true], { account: otherAccount.account.address });
-      await VAMM.write.openPosition([initialTokenReserve * BigInt(2), true], { account: otherAccount.account.address }); // add another position to occupy the array
-      expect(await TokenVault.read.virtualBalanceOf([otherAccount.account.address])).to.equal(initialTokenReserve * BigInt(7));
+      await MockUSDC.write.mint([userAccount.account.address, initialTokenReserve]);
+      await MockUSDC.write.approve([TokenVault.address, initialTokenReserve], { account: userAccount.account.address });
+      await TokenVault.write.depositToken([initialTokenReserve], { account: userAccount.account.address });
+      await VAMM.write.openPosition([initialTokenReserve, true], { account: userAccount.account.address });
+      await VAMM.write.openPosition([initialTokenReserve * BigInt(2), true], { account: userAccount.account.address }); // add another position to occupy the array
+      expect(await TokenVault.read.virtualBalanceOf([userAccount.account.address])).to.equal(initialTokenReserve * BigInt(7));
 
-      expect((await VAMM.read.ethPositionsOf([otherAccount.account.address, BigInt(1)]))[0]).to.equals(initialEthReserve / BigInt(4));
-      await VAMM.write.closePosition([0], { account: otherAccount.account.address });
-      expect((await VAMM.read.ethPositionsOf([otherAccount.account.address, BigInt(0)]))[0]).to.equals(initialEthReserve / BigInt(4));
-      await VAMM.write.closePosition([0], { account: otherAccount.account.address });
-      expect(await TokenVault.read.virtualBalanceOf([otherAccount.account.address])).to.equal(initialTokenReserve * BigInt(10));
+      expect((await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(1)]))[0]).to.equals(initialEthReserve / BigInt(4));
+      await VAMM.write.closePosition([0], { account: userAccount.account.address });
+      expect((await VAMM.read.ethPositionsOf([userAccount.account.address, BigInt(0)]))[0]).to.equals(initialEthReserve / BigInt(4));
+      await VAMM.write.closePosition([0], { account: userAccount.account.address });
+      expect(await TokenVault.read.virtualBalanceOf([userAccount.account.address])).to.equal(initialTokenReserve * BigInt(10));
     });
 
     it("Should revert open position if amount is zero", async function () {
-      const { VAMM, otherAccount } = await loadFixture(deployVAMMFixture);
-      await expect(VAMM.write.openPosition([BigInt(0), true], { account: otherAccount.account.address })).to.be.rejectedWith("Open position amount must not be 0");
+      const { VAMM, userAccount } = await loadFixture(deployVAMMFixture);
+      await expect(VAMM.write.openPosition([BigInt(0), true], { account: userAccount.account.address })).to.be.rejectedWith("Open position amount must not be 0");
     });
 
     it("Should revert open position if insufficient collateral", async function () {
-      const { VAMM, otherAccount } = await loadFixture(deployVAMMFixture);
-      await expect(VAMM.write.openPosition([initialTokenFund * BigInt(1000), true], { account: otherAccount.account.address })).to.be.rejectedWith("Insufficient Collateral");
+      const { VAMM, userAccount } = await loadFixture(deployVAMMFixture);
+      await expect(VAMM.write.openPosition([initialTokenFund * BigInt(1000), true], { account: userAccount.account.address })).to.be.rejectedWith("Insufficient Collateral");
     });
 
     it("Should revert close position if index is invalid", async function () {
-      const { VAMM, otherAccount } = await loadFixture(deployVAMMFixture);
-      await expect(VAMM.write.closePosition([0], { account: otherAccount.account.address })).to.be.rejectedWith("Invalid position index");
+      const { VAMM, userAccount } = await loadFixture(deployVAMMFixture);
+      await expect(VAMM.write.closePosition([0], { account: userAccount.account.address })).to.be.rejectedWith("Invalid position index");
     });
   });
 });
