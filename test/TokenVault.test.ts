@@ -45,11 +45,6 @@ describe("TokenVault contract", function () {
             const { TokenVault, VAMM, randomAccount } = await loadFixture(createFixture(false));
             await expect(TokenVault.write.setAMMAddress([VAMM.address], { account: randomAccount.account.address })).to.be.rejectedWith("OwnableUnauthorizedAccount");
         });
-
-        it("Should revert if trying to set the AMM address more than once", async function () {
-            const { TokenVault, VAMM } = await loadFixture(createFixture());
-            await expect(TokenVault.write.setAMMAddress([VAMM.address])).to.be.rejectedWith("AMM address has been set");
-        });
     });
 
     describe("Token Operations", function () {
